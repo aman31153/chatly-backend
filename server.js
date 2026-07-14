@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const { admin, db, messaging } = require('./firebase');
+const { RtcTokenBuilder, RtcRole } = require('agora-token');
 
 dotenv.config();
 
@@ -257,6 +258,53 @@ app.post('/send-missed-call-notification', async (req, res) => {
   } catch (error) {
     console.error('Error handling missed call notification:', error);
     return res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+});
+
+// Agora Token Endpoint
+app.get('/agora-token', (req, res) => {
+  const channelName = req.query.channelName;
+  if (!channelName) {
+    return res.status(400).json({ error: 'channelName is required' });
+  }
+
+  // Use integer uid if provided, otherwise default to 0
+  let uid = req.query.uid;
+  if (!uid || uid === '') {
+    uid = 0;
+  }
+  
+  // Get role (publisher or subscriber)
+  let role = RtcRole.PUBLISHER;
+  if (req.query.role === 'subscriber') {
+    role = RtcRole.SUBSCRIBER;
+  }
+
+  const expireTime = req.query.expiry ? parseInt(req.query.expiry, 10) : 3600;
+  const currentTime = Math.floor(Date.now() / 1000);
+  const privilegeExpireTime = currentTime + expireTime;
+
+  const appId = process.env.AGORA_APP_ID;
+  const appCertificate = process.env.AGORA_APP_CERTIFICATE;
+
+  if (!appId || !appCertificate) {
+    return res.status(500).json({ error: 'Agora App ID or Certificate not configured on server' });
+  }
+
+  try {
+    const token = RtcTokenBuilder.buildTokenWithUid(
+      appId,
+      appCertificate,
+      channelName,
+      uid,
+      role,
+      expireTime,
+      privilegeExpireTime
+    );
+    return res.json({ token });
+  } catch (err) {
+    console.error('Error generating Agora token:', err);
+    return res.status(500).json({ error: 'Failed to generate token' });
   }
 });
 
