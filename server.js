@@ -158,9 +158,10 @@ app.post('/send-call-notification', async (req, res) => {
           sound: 'default',
           title: callTitle,
           body: callBody,
+          tag: 'call_notification',
           defaultVibrateTimings: true,
         },
-        ttl: 3600 * 1000, // Expire after 30 seconds if not delivered
+        ttl: 3600 * 1000,
       },
       apns: {
         payload: {
@@ -244,6 +245,14 @@ app.post('/send-missed-call-notification', async (req, res) => {
       },
       android: {
         priority: 'high',
+        notification: {
+          channelId: 'call_channel',
+          sound: 'default',
+          title: `Missed call from ${callerName}`,
+          body: 'Tap to call back',
+          tag: 'missed_call_notification',
+          defaultVibrateTimings: true,
+        },
       },
       tokens: tokens
     };
