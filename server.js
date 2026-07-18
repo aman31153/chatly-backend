@@ -358,6 +358,140 @@ app.get('/agora-token', (req, res) => {
   }
 });
 
+// Endpoint to handle secure user reporting and automatic temporary bans
+app.post('/report-user', async (req, res) => {
+  try {
+    const { reporterUid, reportedUid, reason } = req.body;
+
+    if (!reporterUid || !reportedUid || !reason) {
+      return res.status(400).json({ error: 'Missing required parameters. Required: reporterUid, reportedUid, reason' });
+    }
+
+    const reportId = `${reporterUid}_${reportedUid}`;
+
+    // Write/Update the report document to prevent duplicate reports from the same user
+    await db.collection('reports').doc(reportId).set({
+      reporterId: reporterUid,
+      reportedId: reportedUid,
+      reason: reason,
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    // Load moderation settings from system config document
+    let banThreshold = 3;
+    let banDurationHours = 6;
+
+    try {
+      const configDoc = await db.collection('system').doc('moderation').get();
+      if (configDoc.exists) {
+        const configData = configDoc.data();
+        if (configData.banThreshold !== undefined) {
+          banThreshold = configData.banThreshold;
+        }
+        if (configData.banDurationHours !== undefined) {
+          banDurationHours = configData.banDurationHours;
+        }
+      }
+    } catch (configErr) {
+      console.warn('Could not load moderation configuration, using defaults:', configErr.message);
+    }
+
+    // Count how many reports this user has
+    const reportsSnap = await db.collection('reports')
+      .where('reportedId', '==', reportedUid)
+      .get();
+
+    const reportCount = reportsSnap.size;
+    console.log(`User ${reportedUid} has ${reportCount} reports (Threshold: ${banThreshold}).`);
+
+    if (reportCount >= banThreshold) {
+      // Check if already banned to avoid duplicate bans/notifications
+      const userDoc = await db.collection('users').doc(reportedUid).get();
+      let alreadyBanned = false;
+      let tokens = [];
+
+      if (userDoc.exists) {
+        const userData = userDoc.data();
+        tokens = userData.fcmTokens || [];
+        const currentBannedUntil = userData.bannedUntil;
+        const now = admin.firestore.Timestamp.now();
+
+        if (currentBannedUntil && currentBannedUntil.toMillis() > now.toMillis()) {
+          alreadyBanned = true;
+          console.log(`User ${reportedUid} is already banned. Skipping.`);
+        }
+      }
+
+      if (!alreadyBanned) {
+        const banExpiry = new Date();
+        banExpiry.setHours(banExpiry.getHours() + banDurationHours);
+
+        console.log(`Banning user ${reportedUid} until ${banExpiry}`);
+
+        // Update user doc with suspension status and hasUnreadNotifications flag
+        await db.collection('users').doc(reportedUid).update({
+          'isSuspended': true,
+          'bannedUntil': admin.firestore.Timestamp.fromDate(banExpiry),
+          'banReason': 'Temporarily suspended due to multiple reports.',
+          'hasUnreadNotifications': true,
+          'unreadNotificationsCount': admin.firestore.FieldValue.increment(1)
+        });
+
+        // Write in-app notification
+        await db.collection('users').doc(reportedUid).collection('notifications').add({
+          'title': 'Account Suspended',
+          'body': `Your account has been temporarily suspended for ${banDurationHours} hours due to multiple reports.`,
+          'type': 'ban',
+          'createdAt': admin.firestore.FieldValue.serverTimestamp(),
+          'seen': false
+        });
+
+        // Prune notifications to keep only the latest 5 documents
+        try {
+          const notifsSnap = await db.collection('users')
+              .doc(reportedUid)
+              .collection('notifications')
+              .orderBy('createdAt', 'desc')
+              .get();
+          if (notifsSnap.size > 5) {
+            const pruneBatch = db.batch();
+            for (let i = 5; i < notifsSnap.size; i++) {
+              pruneBatch.delete(notifsSnap.docs[i].ref);
+            }
+            await pruneBatch.commit();
+          }
+        } catch (pruneErr) {
+          console.error('Error pruning notifications: ', pruneErr.message);
+        }
+
+        // Send push notification to notify the banned user immediately
+        if (tokens.length > 0) {
+          const payload = {
+            data: {
+              title: 'Account Suspended',
+              body: `Your account has been temporarily suspended for ${banDurationHours} hours due to multiple reports.`,
+              type: 'ban'
+            },
+            android: {
+              priority: 'high'
+            },
+            tokens: tokens
+          };
+          await messaging.sendEachForMulticast(payload).catch(err => {
+            console.error('Error sending ban notification: ', err.message);
+          });
+        }
+      }
+    }
+
+    return res.status(200).json({ success: true, reportCount });
+
+  } catch (error) {
+    console.error('Error handling report-user:', error);
+    return res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+});
+
 // Start Express Server
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Chatly Notification Server is running on http://0.0.0.0:${PORT}`);
