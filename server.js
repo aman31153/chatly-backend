@@ -282,7 +282,7 @@ app.get('/agora-token', (req, res) => {
   if (!uid || uid === '') {
     uid = 0;
   }
-  
+
   // Get role (publisher or subscriber)
   let role = RtcRole.PUBLISHER;
   if (req.query.role === 'subscriber') {
