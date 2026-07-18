@@ -121,7 +121,7 @@ app.post('/send-message', async (req, res) => {
 // Send call notification endpoint
 app.post('/send-call-notification', async (req, res) => {
   try {
-    const { receiverUid, callId, callType, callerName, chatId } = req.body;
+    const { receiverUid, callId, callType, callerName, callerAvatar, chatId } = req.body;
 
     if (!receiverUid || !callId || !callType || !callerName || !chatId) {
       return res.status(400).json({ error: 'Missing required parameters.' });
@@ -140,7 +140,7 @@ app.post('/send-call-notification', async (req, res) => {
     const callTitle = callerName;
     const callBody = callType === 'video' ? '📹 Incoming video call...' : '📞 Incoming audio call...';
 
-    // High-priority call notification with full-screen intent for lock-screen display
+    // High-priority call notification (data-only for Android to allow flutter_callkit_incoming to handle it)
     const payload = {
       data: {
         title: callTitle,
@@ -149,18 +149,11 @@ app.post('/send-call-notification', async (req, res) => {
         callId: callId,
         callType: callType,
         callerName: callerName,
+        callerAvatar: callerAvatar || '',
         type: 'call',
       },
       android: {
         priority: 'high',
-        notification: {
-          channelId: 'call_channel',
-          sound: 'default',
-          title: callTitle,
-          body: callBody,
-          tag: 'call_notification',
-          defaultVibrateTimings: true,
-        },
         ttl: 3600 * 1000,
       },
       apns: {
@@ -245,14 +238,6 @@ app.post('/send-missed-call-notification', async (req, res) => {
       },
       android: {
         priority: 'high',
-        notification: {
-          channelId: 'call_channel',
-          sound: 'default',
-          title: `Missed call from ${callerName}`,
-          body: 'Tap to call back',
-          tag: 'missed_call_notification',
-          defaultVibrateTimings: true,
-        },
       },
       tokens: tokens
     };
@@ -266,6 +251,62 @@ app.post('/send-missed-call-notification', async (req, res) => {
     });
   } catch (error) {
     console.error('Error handling missed call notification:', error);
+    return res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+});
+
+// Send call ended notification endpoint
+app.post('/send-call-ended', async (req, res) => {
+  try {
+    const { receiverUid, callId, chatId } = req.body;
+
+    if (!receiverUid || !callId || !chatId) {
+      return res.status(400).json({ error: 'Missing required parameters.' });
+    }
+
+    const userDoc = await db.collection('users').doc(receiverUid).get();
+    if (!userDoc.exists) {
+      return res.status(404).json({ error: `Receiver user not found` });
+    }
+
+    const tokens = userDoc.data().fcmTokens || [];
+    if (tokens.length === 0) {
+      return res.status(200).json({ success: true, message: 'No FCM tokens.' });
+    }
+
+    // Data-only payload so the flutter background handler can dismiss callkit
+    const payload = {
+      data: {
+        chatId: chatId,
+        callId: callId,
+        type: 'call_ended',
+      },
+      android: {
+        priority: 'high',
+      },
+      apns: {
+        payload: {
+          aps: {
+            contentAvailable: true,
+          }
+        },
+        headers: {
+          'apns-priority': '5',
+          'apns-push-type': 'background',
+        }
+      },
+      tokens: tokens
+    };
+
+    const response = await messaging.sendEachForMulticast(payload);
+    console.log(`Call ended notification sent. successCount: ${response.successCount}`);
+
+    return res.status(200).json({
+      success: true,
+      sentCount: response.successCount,
+    });
+  } catch (error) {
+    console.error('Error handling call ended notification:', error);
     return res.status(500).json({ error: 'Internal server error', details: error.message });
   }
 });
