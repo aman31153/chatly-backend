@@ -311,6 +311,38 @@ app.post('/send-call-ended', async (req, res) => {
   }
 });
 
+// Decline call endpoint to clean up RTDB via Admin SDK
+app.post('/decline-call', async (req, res) => {
+  try {
+    console.log('Received decline call request:', req.body);
+    const { callId } = req.body;
+    if (!callId) {
+      return res.status(400).json({ error: 'Missing required callId parameter.' });
+    }
+
+    const rtdb = admin.database();
+    const callRef = rtdb.ref(`calls/${callId}`);
+    const snap = await callRef.get();
+
+    if (snap.exists()) {
+      const data = snap.val();
+      const receiverId = data ? data.receiverId : null;
+      await callRef.remove();
+      if (receiverId) {
+        await rtdb.ref(`incomingCalls/${receiverId}/${callId}`).remove();
+      }
+      console.log(`Call ${callId} successfully declined and removed via Admin SDK`);
+    } else {
+      console.log(`Call ${callId} node already removed or not found in RTDB`);
+    }
+
+    return res.status(200).json({ success: true, callId });
+  } catch (error) {
+    console.error('Error in /decline-call endpoint:', error);
+    return res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+});
+
 // Agora Token Endpoint
 app.get('/agora-token', (req, res) => {
   const channelName = req.query.channelName;
@@ -449,10 +481,10 @@ app.post('/report-user', async (req, res) => {
         // Prune notifications to keep only the latest 5 documents
         try {
           const notifsSnap = await db.collection('users')
-              .doc(reportedUid)
-              .collection('notifications')
-              .orderBy('createdAt', 'desc')
-              .get();
+            .doc(reportedUid)
+            .collection('notifications')
+            .orderBy('createdAt', 'desc')
+            .get();
           if (notifsSnap.size > 5) {
             const pruneBatch = db.batch();
             for (let i = 5; i < notifsSnap.size; i++) {

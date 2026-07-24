@@ -22,15 +22,21 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
   }
 }
 
+const databaseURL =
+  process.env.FIREBASE_DATABASE_URL ||
+  'https://chatly-8d006-default-rtdb.asia-southeast1.firebasedatabase.app';
+
 try {
   if (serviceAccount) {
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
-      projectId: process.env.FIRESTORE_PROJECT_ID || serviceAccount.project_id
+      projectId: process.env.FIRESTORE_PROJECT_ID || serviceAccount.project_id,
+      databaseURL: databaseURL,
     });
   } else {
     admin.initializeApp({
-      projectId: process.env.FIRESTORE_PROJECT_ID
+      projectId: process.env.FIRESTORE_PROJECT_ID,
+      databaseURL: databaseURL,
     });
   }
   console.log('Firebase Admin SDK initialized successfully.');
