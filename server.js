@@ -47,10 +47,6 @@ app.post('/send-message', async (req, res) => {
 
     // Construct FCM Multicast payload
     const payload = {
-      notification: {
-        title: senderName,
-        body: message,
-      },
       data: {
         title: senderName,
         body: message,
@@ -59,13 +55,7 @@ app.post('/send-message', async (req, res) => {
         type: 'chat',
       },
       android: {
-        priority: 'high',
-        notification: {
-          channelId: 'chat_messages_v3',
-          sound: 'default',
-          priority: 'max',
-          visibility: 'public',
-        },
+        priority: 'high'
       },
       apns: {
         payload: {
