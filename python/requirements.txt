@@ -1,0 +1,14 @@
+# NudeNet and its runtime dependencies
+# Pinned versions tested on Python 3.11 + Render Free (Linux/amd64)
+
+# NudeNet v3 uses ONNX runtime — no GPU required, works on Render Free CPU
+nudenet==3.4.2
+
+# ONNX Runtime — CPU-only build (much smaller than the GPU variant)
+onnxruntime==1.18.1
+
+# Image processing
+Pillow==10.3.0
+
+# Numerical operations (required by NudeNet / ONNX)
+numpy==1.26.4

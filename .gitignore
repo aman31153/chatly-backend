@@ -26,3 +26,11 @@ serviceAccountKey.json
 *.njsproj
 *.sln
 *.sw?
+
+# Temporary image uploads (deleted after processing, never committed)
+uploads/
+
+# Python bytecode cache
+__pycache__/
+*.pyc
+*.pyo

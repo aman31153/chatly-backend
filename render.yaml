@@ -1,0 +1,70 @@
+# Render deployment configuration for Chatly Notification Server
+# Docs: https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: chatly-notification-server
+    runtime: node
+
+    # ------------------------------------------------------------------
+    # Build command
+    # Runs once per deploy. We:
+    #   1. Install Node.js dependencies
+    #   2. Install Python dependencies (NudeNet + ONNX Runtime)
+    #   3. Pre-download the NudeNet ONNX model (~90 MB) so the first
+    #      user request doesn't trigger a slow cold-start download.
+    # ------------------------------------------------------------------
+    buildCommand: |
+      npm install &&
+      pip install -r python/requirements.txt &&
+      python3 python/preload_model.py
+
+    # ------------------------------------------------------------------
+    # Start command — simply starts the Express server
+    # ------------------------------------------------------------------
+    startCommand: node server.js
+
+    # ------------------------------------------------------------------
+    # Environment variables
+    # Set secret values (CLOUDINARY keys, etc.) via the Render Dashboard
+    # under Environment → Secret Files / Environment Variables.
+    # The variables listed here are non-secret defaults only.
+    # ------------------------------------------------------------------
+    envVars:
+      # Node.js version (Render uses the version in package.json engines
+      # if set; otherwise it picks a recent LTS)
+      - key: NODE_ENV
+        value: production
+
+      # Python version for pip installs
+      - key: PYTHON_VERSION
+        value: "3.11.0"
+
+      # Adult content threshold: images with "unsafe" score >= this value
+      # are rejected. Range: 0.0–1.0. Lower = stricter.
+      - key: NUDITY_THRESHOLD
+        value: "0.6"
+
+      # Max image upload size in MB
+      - key: MAX_IMAGE_SIZE_MB
+        value: "5"
+
+      # Timeout (ms) for the Python NudeNet process.
+      # 30s is generous — classification is usually 3–8s on Render Free CPU.
+      - key: MODERATION_TIMEOUT
+        value: "30000"
+
+      # --- SECRET VARIABLES (set manually in Render Dashboard) ---
+      # CLOUDINARY_CLOUD_NAME
+      # CLOUDINARY_API_KEY
+      # CLOUDINARY_API_SECRET
+      # FIREBASE_SERVICE_ACCOUNT_JSON
+      # AGORA_APP_ID
+      # AGORA_APP_CERTIFICATE
+
+    # ------------------------------------------------------------------
+    # Render Free tier: 512 MB RAM, shared CPU, spins down after 15 min
+    # of inactivity (cold starts ~5–10 seconds for Node, longer for the
+    # first NudeNet call if the model wasn't pre-downloaded at build time)
+    # ------------------------------------------------------------------
+    plan: free

@@ -3,12 +3,16 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const { admin, db, messaging } = require('./firebase');
 const { RtcTokenBuilder, RtcRole } = require('agora-token');
+const uploadRoute = require('./src/routes/uploadRoute');
 
 dotenv.config();
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// Image upload route (Multer + NudeNet moderation + Cloudinary)
+app.use('/api', uploadRoute);
 
 const PORT = process.env.PORT || 5000;
 
