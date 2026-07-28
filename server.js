@@ -398,6 +398,29 @@ app.post('/report-user', async (req, res) => {
       return res.status(400).json({ error: 'Missing required parameters. Required: reporterUid, reportedUid, reason' });
     }
 
+    // Check if they have exchanged at least 5 messages
+    const chatsSnap = await db.collection('chats')
+      .where('participants', 'array-contains', reporterUid)
+      .get();
+    
+    const sharedChat = chatsSnap.docs.find(doc => {
+      const parts = doc.data().participants || [];
+      return parts.includes(reportedUid);
+    });
+
+    if (!sharedChat) {
+      console.log(`Report skipped: No chat found between ${reporterUid} and ${reportedUid}`);
+      return res.json({ success: true, message: 'Report received but skipped due to lack of interaction.' });
+    }
+
+    const messagesQuery = await db.collection('chats').doc(sharedChat.id).collection('messages').count().get();
+    const messageCount = messagesQuery.data().count;
+
+    if (messageCount < 5) {
+      console.log(`Report skipped: Only ${messageCount} messages exchanged between ${reporterUid} and ${reportedUid}`);
+      return res.json({ success: true, message: 'Report received but skipped due to insufficient messages.' });
+    }
+
     const reportId = `${reporterUid}_${reportedUid}`;
 
     // Write/Update the report document to prevent duplicate reports from the same user
@@ -427,12 +450,13 @@ app.post('/report-user', async (req, res) => {
       console.warn('Could not load moderation configuration, using defaults:', configErr.message);
     }
 
-    // Count how many reports this user has
-    const reportsSnap = await db.collection('reports')
+    // Count how many reports this user has using count() aggregation
+    const reportsCountQuery = await db.collection('reports')
       .where('reportedId', '==', reportedUid)
+      .count()
       .get();
 
-    const reportCount = reportsSnap.size;
+    const reportCount = reportsCountQuery.data().count;
     console.log(`User ${reportedUid} has ${reportCount} reports (Threshold: ${banThreshold}).`);
 
     if (reportCount >= banThreshold) {
