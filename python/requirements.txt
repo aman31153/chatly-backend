@@ -8,7 +8,7 @@ nudenet==3.4.2
 onnxruntime==1.28.0
 
 # Image processing
-Pillow==10.3.0
+Pillow==11.1.0
 
 # Numerical operations (required by NudeNet / ONNX)
 numpy==1.26.4
