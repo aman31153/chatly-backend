@@ -5,7 +5,7 @@
 nudenet==3.4.2
 
 # ONNX Runtime — CPU-only build (much smaller than the GPU variant)
-onnxruntime==1.18.1
+onnxruntime==1.28.1
 
 # Image processing
 Pillow==10.3.0
