@@ -24,7 +24,7 @@ app.get('/health', (req, res) => {
 // Send message notification endpoint
 app.post('/send-message', async (req, res) => {
   try {
-    const { receiverUid, senderUid, senderName, message, chatId } = req.body;
+    const { receiverUid, senderUid, senderName, senderAvatar, message, chatId } = req.body;
 
     // Validate request body
     if (!receiverUid || !senderUid || !senderName || !message || !chatId) {
@@ -56,6 +56,7 @@ app.post('/send-message', async (req, res) => {
         body: message,
         chatId: chatId,
         senderUid: senderUid,
+        callerAvatar: senderAvatar || '',
         type: 'chat',
       },
       android: {
