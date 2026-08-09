@@ -259,6 +259,90 @@ app.post('/send-missed-call-notification', async (req, res) => {
   }
 });
 
+// Dismiss a delivered chat notification on the receiver's device.
+// Called when the sender deletes a message so User B's system tray notification
+// is automatically cancelled. Only targets receiverUid — other users are unaffected.
+app.post('/dismiss-notification', async (req, res) => {
+  try {
+    const { receiverUid, chatId } = req.body;
+
+    if (!receiverUid || !chatId) {
+      return res.status(400).json({
+        error: 'Missing required parameters. Required: receiverUid, chatId'
+      });
+    }
+
+    const userDoc = await db.collection('users').doc(receiverUid).get();
+    if (!userDoc.exists) {
+      return res.status(404).json({ error: `Receiver user with UID ${receiverUid} not found` });
+    }
+
+    const tokens = userDoc.data().fcmTokens || [];
+    if (tokens.length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: 'No FCM tokens registered for receiver. Dismiss skipped.'
+      });
+    }
+
+    // Data-only (silent) payload — no notification key so no banner is shown.
+    // The Flutter handler reads type='dismiss_chat_notification' and cancels
+    // localNotifications.cancel(chatId.hashCode) on the receiver's device.
+    const payload = {
+      data: {
+        type: 'dismiss_chat_notification',
+        chatId: chatId,
+      },
+      android: {
+        priority: 'high',
+      },
+      apns: {
+        payload: {
+          aps: {
+            contentAvailable: true,
+          }
+        },
+        headers: {
+          'apns-priority': '5',
+          'apns-push-type': 'background',
+        }
+      },
+      tokens: tokens
+    };
+
+    const response = await messaging.sendEachForMulticast(payload);
+    console.log(`Dismiss notification sent to ${receiverUid} for chatId ${chatId}. successCount: ${response.successCount}, failureCount: ${response.failureCount}`);
+
+    // Clean up invalid tokens
+    const invalidTokens = [];
+    response.responses.forEach((resItem, index) => {
+      if (!resItem.success) {
+        const err = resItem.error;
+        if (
+          err.code === 'messaging/invalid-registration-token' ||
+          err.code === 'messaging/registration-token-not-registered'
+        ) {
+          invalidTokens.push(tokens[index]);
+        }
+      }
+    });
+    if (invalidTokens.length > 0) {
+      await db.collection('users').doc(receiverUid).update({
+        fcmTokens: admin.firestore.FieldValue.arrayRemove(...invalidTokens)
+      }).catch(e => console.error('Token cleanup error:', e.message));
+    }
+
+    return res.status(200).json({
+      success: true,
+      sentCount: response.successCount,
+      failedCount: response.failureCount,
+    });
+  } catch (error) {
+    console.error('Error handling dismiss-notification:', error);
+    return res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+});
+
 // Send call ended notification endpoint
 app.post('/send-call-ended', async (req, res) => {
   try {
@@ -407,7 +491,7 @@ app.post('/report-user', async (req, res) => {
     const chatsSnap = await db.collection('chats')
       .where('participants', 'array-contains', reporterUid)
       .get();
-    
+
     const sharedChat = chatsSnap.docs.find(doc => {
       const parts = doc.data().participants || [];
       return parts.includes(reportedUid);
