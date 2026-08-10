@@ -15,6 +15,26 @@ app.use(express.json());
 app.use('/api', uploadRoute);
 
 const PORT = process.env.PORT || 5000;
+const https = require('https');
+
+const fs = require('fs');
+const path = require('path');
+
+// Get stickers configuration endpoint
+app.get('/api/stickers', (req, res) => {
+  try {
+    const configPath = path.join(__dirname, 'stickers_config.json');
+    if (!fs.existsSync(configPath)) {
+      return res.status(404).json({ error: 'Stickers configuration not found' });
+    }
+    const data = fs.readFileSync(configPath, 'utf8');
+    const json = JSON.parse(data);
+    res.status(200).json(json);
+  } catch (error) {
+    console.error('Error reading stickers config:', error.message);
+    res.status(500).json({ error: 'Failed to read stickers configuration' });
+  }
+});
 
 // Health check endpoint
 app.get('/health', (req, res) => {

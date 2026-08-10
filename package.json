@@ -19,12 +19,14 @@
   "dependencies": {
     "agora-access-token": "^2.0.4",
     "agora-token": "^2.0.5",
+    "archiver": "^8.0.0",
     "cloudinary": "^2.4.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "firebase-admin": "^12.1.0",
     "multer": "^2.2.0",
+    "sharp": "^0.35.3",
     "uuid": "^10.0.0"
   }
 }

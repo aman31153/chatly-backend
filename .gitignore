@@ -34,3 +34,9 @@ uploads/
 __pycache__/
 *.pyc
 *.pyo
+
+# Temporary sticker build artifacts
+temp_stickers/
+standalone_stickers/
+stickers_config.json
+
