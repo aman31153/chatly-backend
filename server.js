@@ -1,11 +1,19 @@
 const express = require('express');
 const cors = require('cors');
-const dotenv = require('dotenv');
+require('./src/config/env');
+
+// Disable console outputs in production
+if (process.env.NODE_ENV === 'production') {
+  console.log = function() {};
+  console.info = function() {};
+  console.warn = function() {};
+  console.error = function() {};
+}
+
 const { admin, db, messaging } = require('./firebase');
 const { RtcTokenBuilder, RtcRole } = require('agora-token');
 const uploadRoute = require('./src/routes/uploadRoute');
 
-dotenv.config();
 
 const app = express();
 app.use(cors());
@@ -44,7 +52,8 @@ app.get('/health', (req, res) => {
 // Send message notification endpoint
 app.post('/send-message', async (req, res) => {
   try {
-    const { receiverUid, senderUid, senderName, senderAvatar, message, chatId } = req.body;
+    const { receiverUid, senderUid, senderName, senderAvatar, message, chatId, senderSeq, messageId, giftType } = req.body;
+    console.log(`[send-message] Request received for chatId: ${chatId}, giftType: ${giftType}`);
 
     // Validate request body
     if (!receiverUid || !senderUid || !senderName || !message || !chatId) {
@@ -76,8 +85,12 @@ app.post('/send-message', async (req, res) => {
         body: message,
         chatId: chatId,
         senderUid: senderUid,
+        receiverUid: receiverUid,
+        senderSeq: senderSeq ? senderSeq.toString() : '',
+        messageId: messageId ? messageId.toString() : '',
         callerAvatar: senderAvatar || '',
         type: 'chat',
+        giftType: giftType || '',
       },
       android: {
         priority: 'high'
@@ -94,10 +107,12 @@ app.post('/send-message', async (req, res) => {
       tokens: tokens
     };
 
+    console.log(`[send-message] Sending FCM payload with giftType: ${payload.data.giftType}`);
+
     // Send multicast notifications
     const response = await messaging.sendEachForMulticast(payload);
 
-    console.log(`Sent notification message response. successCount: ${response.successCount}, failureCount: ${response.failureCount}`);
+    console.log(`Sent notification message response. successCount: ${response.successCount}, failureCount: ${response.failureCount}. Message: ${message}`);
 
     // Process failures to identify expired/invalid tokens
     const invalidTokens = [];
@@ -235,7 +250,7 @@ app.post('/send-call-notification', async (req, res) => {
 // Send missed call notification endpoint
 app.post('/send-missed-call-notification', async (req, res) => {
   try {
-    const { receiverUid, callId, callerName, chatId } = req.body;
+    const { receiverUid, callId, callerName, chatId, senderUid, senderSeq } = req.body;
 
     if (!receiverUid || !callId || !callerName || !chatId) {
       return res.status(400).json({ error: 'Missing required parameters.' });
@@ -259,6 +274,8 @@ app.post('/send-missed-call-notification', async (req, res) => {
         callId: callId,
         callerName: callerName,
         type: 'missed_call',
+        senderUid: senderUid || '',
+        senderSeq: senderSeq ? senderSeq.toString() : '',
       },
       android: {
         priority: 'high',
@@ -366,7 +383,7 @@ app.post('/dismiss-notification', async (req, res) => {
 // Send call ended notification endpoint
 app.post('/send-call-ended', async (req, res) => {
   try {
-    const { receiverUid, callId, chatId } = req.body;
+    const { receiverUid, callId, chatId, senderUid, senderSeq } = req.body;
 
     if (!receiverUid || !callId || !chatId) {
       return res.status(400).json({ error: 'Missing required parameters.' });
@@ -388,6 +405,8 @@ app.post('/send-call-ended', async (req, res) => {
         chatId: chatId,
         callId: callId,
         type: 'call_ended',
+        senderUid: senderUid || '',
+        senderSeq: senderSeq ? senderSeq.toString() : '',
       },
       android: {
         priority: 'high',
@@ -652,6 +671,63 @@ app.post('/report-user', async (req, res) => {
 
   } catch (error) {
     console.error('Error handling report-user:', error);
+    return res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+});
+
+// Send game accepted notification endpoint
+app.post('/send-game-accepted', async (req, res) => {
+  try {
+    const { receiverUid, chatId, gameId, gameType, senderName } = req.body;
+
+    if (!receiverUid || !chatId || !gameId || !senderName) {
+      return res.status(400).json({ error: 'Missing required parameters.' });
+    }
+
+    const userDoc = await db.collection('users').doc(receiverUid).get();
+    if (!userDoc.exists) {
+      return res.status(404).json({ error: `Receiver user not found` });
+    }
+
+    const tokens = userDoc.data().fcmTokens || [];
+    if (tokens.length === 0) {
+      return res.status(200).json({ success: true, message: 'No FCM tokens.' });
+    }
+
+    const payload = {
+      data: {
+        title: 'Game Accepted',
+        body: `${senderName} accepted your game invite`,
+        chatId: chatId,
+        gameId: gameId,
+        gameType: gameType || '',
+        type: 'game_accepted',
+      },
+      android: {
+        priority: 'high',
+      },
+      apns: {
+        payload: {
+          aps: {
+            contentAvailable: true,
+            sound: 'default',
+            alert: { title: 'Game Accepted', body: `${senderName} accepted your game invite` },
+            badge: 1,
+          }
+        },
+      },
+      tokens: tokens
+    };
+
+    const response = await messaging.sendEachForMulticast(payload);
+    console.log(`Game accepted notification sent. successCount: ${response.successCount}`);
+
+    return res.status(200).json({
+      success: true,
+      sentCount: response.successCount,
+    });
+  } catch (error) {
+    console.error('Error handling game accepted notification:', error);
     return res.status(500).json({ error: 'Internal server error', details: error.message });
   }
 });
