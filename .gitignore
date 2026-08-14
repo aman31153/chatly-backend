@@ -15,7 +15,7 @@ yarn-error.log*
 .env.production.local
 
 # Firebase credentials / service accounts
-serviceAccountKey.json
+serviceAccountKey*.json
 *.pem
 
 # Editor configurations

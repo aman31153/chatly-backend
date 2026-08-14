@@ -1,7 +1,6 @@
 const admin = require('firebase-admin');
-const dotenv = require('dotenv');
+require('./src/config/env');
 
-dotenv.config();
 
 let serviceAccount;
 
@@ -14,11 +13,15 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
   }
 } else {
   console.warn('WARNING: FIREBASE_SERVICE_ACCOUNT_JSON environment variable is not defined.');
-  console.warn('Admin SDK will attempt to use default credentials or look for local serviceAccountKey.json.');
+  
+  const env = require('./src/config/env');
+  const localKeyPath = env.isDevelopment ? './serviceAccountKey.dev.json' : './serviceAccountKey.json';
+  
+  console.warn(`Admin SDK will look for local ${localKeyPath}.`);
   try {
-    serviceAccount = require('./serviceAccountKey.json');
+    serviceAccount = require(localKeyPath);
   } catch (err) {
-    console.warn('Local serviceAccountKey.json not found. Admin SDK will try fallback authentication.');
+    console.warn(`Local ${localKeyPath} not found. Admin SDK will try fallback authentication.`);
   }
 }
 
