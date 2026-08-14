@@ -4,10 +4,10 @@ require('./src/config/env');
 
 // Disable console outputs in production
 if (process.env.NODE_ENV === 'production') {
-  console.log = function() {};
-  console.info = function() {};
-  console.warn = function() {};
-  console.error = function() {};
+  console.log = function () { };
+  console.info = function () { };
+  console.warn = function () { };
+  console.error = function () { };
 }
 
 const { admin, db, messaging } = require('./firebase');
