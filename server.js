@@ -2,12 +2,7 @@ const express = require('express');
 const cors = require('cors');
 require('./src/config/env');
 
-// Disable console outputs in production
-if (process.env.NODE_ENV === 'production') {
-  console.log = function () { };
-  console.info = function () { };
-  console.warn = function () { };
-}
+// Removed console override temporarily so you can see all logs on Render
 
 const { admin, db, messaging } = require('./firebase');
 const { RtcTokenBuilder, RtcRole } = require('agora-token');
