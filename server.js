@@ -8,9 +8,217 @@ const { admin, db, messaging } = require('./firebase');
 const { RtcTokenBuilder, RtcRole } = require('agora-token');
 const uploadRoute = require('./src/routes/uploadRoute');
 
-
 const app = express();
-app.use(cors());
+const http = require('http');
+const { Server } = require('socket.io');
+
+const server = http.createServer(app);
+
+// ── CORS configuration ─────────────────────────────────────────────────────
+// Shared by both Express middleware and Socket.IO so they stay in sync.
+const corsOptions = {
+  origin: [
+    // ── Local development ────────────────────────────────────────────────
+    'http://localhost:3000',
+    'http://localhost:5000',
+    'http://192.168.29.155:5000',   // LAN dev device
+
+    // ── Production API (Render) ──────────────────────────────────────────
+    'https://api.amanjainstudio.site',
+
+    // ── Firebase Hosting (web clients) ──────────────────────────────────
+    'https://chatly-8d006.web.app',
+    'https://chatly-8d006.firebaseapp.com',
+  ],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+};
+
+const io = new Server(server, {
+  cors: {
+    origin: corsOptions.origin,
+    methods: corsOptions.methods,
+    allowedHeaders: corsOptions.allowedHeaders,
+    credentials: corsOptions.credentials,
+  },
+});
+
+// In-memory store for incognito messages
+// Key: chatId, Value: Map of messageId -> messageData
+const incognitoMessagesMap = new Map();
+
+// Periodic cleanup of expired messages (every 5 minutes)
+setInterval(() => {
+  const now = Date.now();
+  for (const [chatId, messages] of incognitoMessagesMap.entries()) {
+    for (const [msgId, msg] of messages.entries()) {
+      if (now >= msg.expiresAt) {
+        messages.delete(msgId);
+      }
+    }
+    if (messages.size === 0) {
+      incognitoMessagesMap.delete(chatId);
+    }
+  }
+}, 5 * 60 * 1000);
+
+// Socket.io Connection Logic
+io.on('connection', (socket) => {
+  console.log(`Socket connected: ${socket.id}`);
+
+  socket.on('join_room', (chatId) => {
+    socket.join(chatId);
+    console.log(`Socket ${socket.id} joined room ${chatId}`);
+  });
+
+  socket.on('leave_room', (chatId) => {
+    socket.leave(chatId);
+    console.log(`Socket ${socket.id} left room ${chatId}`);
+  });
+
+  socket.on('fetch_incognito_messages', (data, callback) => {
+    try {
+      if (data && data.chatId) {
+        const messages = incognitoMessagesMap.get(data.chatId);
+        if (messages) {
+          const now = Date.now();
+          const validMessages = Array.from(messages.values()).filter(m => now < m.expiresAt);
+          if (callback) callback(validMessages);
+          return;
+        }
+      }
+      if (callback) callback([]);
+    } catch (e) {
+      console.error('Error fetching incognito messages', e);
+      if (callback) callback([]);
+    }
+  });
+
+  socket.on('incognito_message_ack', (data) => {
+    try {
+      const { messageId, chatId } = data;
+      if (messageId && chatId) {
+        const messages = incognitoMessagesMap.get(chatId);
+        if (messages && messages.has(messageId)) {
+          messages.delete(messageId);
+          if (messages.size === 0) {
+            incognitoMessagesMap.delete(chatId);
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Error in incognito_message_ack', e);
+    }
+  });
+
+  socket.on('send_incognito_message', async (data) => {
+    try {
+      const { messageId, chatId, senderId, receiverUid, senderName, text, replyTo } = data;
+      if (!messageId || !chatId || !senderId || !text) {
+        return;
+      }
+
+      // Server-side blocking validation
+      try {
+        const chatDoc = await db.collection('chats').doc(chatId).get();
+        if (!chatDoc.exists || chatDoc.data().isIncognito !== true) {
+          console.log(`Rejected incognito message for ${chatId} (incognito disabled or chat missing)`);
+          return;
+        }
+      } catch (e) {
+        console.error('Error validating chat state', e);
+      }
+
+      const createdAt = Date.now();
+      const expiresAt = createdAt + (30 * 60 * 1000); // 30 mins
+
+      const messagePayload = {
+        id: messageId,
+        messageId,
+        chatId,
+        senderId,
+        text,
+        createdAt,
+        expiresAt,
+        type: 'text',
+        ...(replyTo ? { replyTo } : {})
+      };
+
+      // Store in temporary map
+      if (!incognitoMessagesMap.has(chatId)) {
+        incognitoMessagesMap.set(chatId, new Map());
+      }
+      incognitoMessagesMap.get(chatId).set(messageId, messagePayload);
+
+      // Broadcast to room
+      socket.to(chatId).emit('receive_incognito_message', messagePayload);
+
+      // Send generic push notification to receiver
+      if (receiverUid) {
+        const userDoc = await db.collection('users').doc(receiverUid).get();
+        if (userDoc.exists) {
+          const tokens = userDoc.data().fcmTokens || [];
+          if (tokens.length > 0) {
+            const payload = {
+              data: {
+                title: senderName || 'Incognito Chat',
+                body: '💬 You received a new message',
+                chatId: chatId,
+                senderUid: senderId,
+                receiverUid: receiverUid,
+                messageId: messageId,
+                type: 'incognito_chat',
+              },
+              android: { priority: 'high' },
+              apns: {
+                payload: {
+                  aps: {
+                    contentAvailable: true,
+                    sound: 'default',
+                    badge: 1,
+                  }
+                }
+              },
+              tokens: tokens
+            };
+            messaging.sendEachForMulticast(payload).catch(err => console.error(err));
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Error in send_incognito_message', e);
+    }
+  });
+
+  socket.on('clear_incognito_chat', async (data) => {
+    if (data && data.chatId) {
+      const clearPayload = {
+        chatId: data.chatId,
+        timestamp: Date.now()
+      };
+
+      incognitoMessagesMap.delete(data.chatId);
+
+      try {
+        await db.collection('chats').doc(data.chatId).set({
+          incognitoClearedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+      } catch (e) {
+        console.error('Error updating incognito clear timestamp', e);
+      }
+
+      socket.to(data.chatId).emit('receive_clear_incognito_chat', clearPayload);
+    }
+  });
+
+  socket.on('disconnect', () => {
+    console.log(`Socket disconnected: ${socket.id}`);
+  });
+});
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // Pre-flight for all routes
 app.use(express.json());
 
 // Image upload route (Multer + NudeNet moderation + Cloudinary)
@@ -727,7 +935,10 @@ app.post('/send-game-accepted', async (req, res) => {
 });
 
 // Start Express Server
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Chatly Notification Server is running on http://0.0.0.0:${PORT}`);
-  console.log(`Local network access: http://192.168.29.155:${PORT}`);
+server.listen(PORT, '0.0.0.0', () => {
+  const { isProduction } = require('./src/config/env');
+  console.log(`Chatly Notification Server is running on port ${PORT}`);
+  if (!isProduction) {
+    console.log(`Local network access: http://192.168.29.155:${PORT}`);
+  }
 });

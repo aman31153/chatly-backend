@@ -2,6 +2,7 @@
   "name": "chatly-notification-server",
   "version": "1.0.0",
   "description": "FCM Notification Server for Chatly",
+  "engines": { "node": ">=20.0.0" },
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -29,6 +30,7 @@
     "firebase-admin": "^12.1.0",
     "multer": "^2.2.0",
     "sharp": "^0.35.3",
+    "socket.io": "^4.8.3",
     "uuid": "^10.0.0"
   }
 }
