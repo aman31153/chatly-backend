@@ -7,6 +7,7 @@ require('./src/config/env');
 const { admin, db, messaging } = require('./firebase');
 const { RtcTokenBuilder, RtcRole } = require('agora-token');
 const uploadRoute = require('./src/routes/uploadRoute');
+const learnRoute = require('./src/routes/learnRoute');
 
 const app = express();
 const http = require('http');
@@ -223,6 +224,7 @@ app.use(express.json());
 
 // Image upload route (Multer + NudeNet moderation + Cloudinary)
 app.use('/api', uploadRoute);
+app.use('/api/learn', learnRoute);
 
 const PORT = process.env.PORT || 5000;
 const https = require('https');
