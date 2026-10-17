@@ -936,6 +936,170 @@ app.post('/send-game-accepted', async (req, res) => {
   }
 });
 
+// ── In-memory caches for post interaction notifications ─────────────────────
+// Caches FCM tokens of users for 5 minutes to avoid Firestore read hits.
+// Key: receiverUid, Value: { tokens: string[], expiresAt: number }
+const userFcmTokenCache = new Map();
+
+// Cooldown map to prevent duplicate / spam notifications
+// Key: `${senderUid}:${postId}:${type}`, Value: timestamp (ms)
+const postInteractionCooldown = new Map();
+
+// Cleanup expired items every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [uid, cached] of userFcmTokenCache.entries()) {
+    if (now >= cached.expiresAt) {
+      userFcmTokenCache.delete(uid);
+    }
+  }
+  for (const [key, ts] of postInteractionCooldown.entries()) {
+    if (now - ts > 60000) { // older than 1 minute
+      postInteractionCooldown.delete(key);
+    }
+  }
+}, 5 * 60 * 1000);
+
+// Send post interaction notification (like, comment) without writing to Firestore
+app.post('/send-post-interaction', async (req, res) => {
+  try {
+    const {
+      receiverUid,
+      senderUid,
+      senderName,
+      senderAvatar,
+      postId,
+      postContent,
+      type, // 'post_like' or 'post_comment'
+      commentText
+    } = req.body;
+
+    // Validation
+    if (!receiverUid || !senderUid || !postId || !type) {
+      return res.status(400).json({ error: 'Missing required parameters.' });
+    }
+
+    // Do not notify self
+    if (receiverUid === senderUid) {
+      return res.status(200).json({ success: true, message: 'Self interaction ignored.' });
+    }
+
+    // Debounce / Cooldown check: 30s for likes, 3s for comments
+    const cooldownKey = `${senderUid}:${postId}:${type}`;
+    const now = Date.now();
+    const cooldownLimit = type === 'post_like' ? 30000 : 3000;
+    const lastInteraction = postInteractionCooldown.get(cooldownKey);
+    if (lastInteraction && (now - lastInteraction < cooldownLimit)) {
+      return res.status(200).json({ success: true, message: 'Debounced / Cooldown active.' });
+    }
+    postInteractionCooldown.set(cooldownKey, now);
+
+    // Retrieve receiver FCM tokens (cached in-memory for 5 minutes)
+    let tokens = null;
+    const cachedTokenData = userFcmTokenCache.get(receiverUid);
+    if (cachedTokenData && cachedTokenData.expiresAt > now) {
+      tokens = cachedTokenData.tokens;
+    } else {
+      const userDoc = await db.collection('users').doc(receiverUid).get();
+      if (!userDoc.exists) {
+        return res.status(404).json({ error: `Receiver user ${receiverUid} not found.` });
+      }
+      tokens = userDoc.data().fcmTokens || [];
+      userFcmTokenCache.set(receiverUid, {
+        tokens,
+        expiresAt: now + (5 * 60 * 1000)
+      });
+    }
+
+    if (!tokens || tokens.length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: 'No FCM tokens registered for receiver. Notification skipped.'
+      });
+    }
+
+    // Construct display title and body
+    const name = senderName || 'Someone';
+    let bodyText = '';
+    const postSnippet = postContent
+      ? (postContent.length > 50 ? postContent.substring(0, 47) + '...' : postContent)
+      : 'your post';
+
+    if (type === 'post_like') {
+      bodyText = `liked: "${postSnippet}"`;
+    } else {
+      const commentSnippet = commentText
+        ? (commentText.length > 50 ? commentText.substring(0, 47) + '...' : commentText)
+        : '';
+      bodyText = commentSnippet
+        ? `commented: "${commentSnippet}"`
+        : `commented on: "${postSnippet}"`;
+    }
+
+    const payload = {
+      data: {
+        title: name,
+        body: bodyText,
+        postId: postId,
+        senderUid: senderUid,
+        receiverUid: receiverUid,
+        callerAvatar: senderAvatar || '',
+        type: type,
+        commentText: commentText || '',
+        postContent: postContent || '',
+      },
+      android: {
+        priority: 'high',
+      },
+      apns: {
+        payload: {
+          aps: {
+            contentAvailable: true,
+            sound: 'default',
+            alert: { title: name, body: bodyText },
+            badge: 1,
+          }
+        }
+      },
+      tokens: tokens,
+    };
+
+    const response = await messaging.sendEachForMulticast(payload);
+    console.log(`[send-post-interaction] Sent ${type} to ${receiverUid}. success: ${response.successCount}, fail: ${response.failureCount}`);
+
+    // Stale token cleanup
+    const invalidTokens = [];
+    response.responses.forEach((resItem, index) => {
+      if (!resItem.success) {
+        const error = resItem.error;
+        if (
+          error.code === 'messaging/invalid-registration-token' ||
+          error.code === 'messaging/registration-token-not-registered'
+        ) {
+          invalidTokens.push(tokens[index]);
+        }
+      }
+    });
+
+    if (invalidTokens.length > 0) {
+      // Invalidate local memory cache for user
+      userFcmTokenCache.delete(receiverUid);
+      db.collection('users').doc(receiverUid).update({
+        fcmTokens: admin.firestore.FieldValue.arrayRemove(...invalidTokens)
+      }).catch(err => console.error('Failed to prune FCM tokens:', err.message));
+    }
+
+    return res.status(200).json({
+      success: true,
+      sentCount: response.successCount,
+      failedCount: response.failureCount,
+    });
+  } catch (error) {
+    console.error('Error handling send-post-interaction:', error);
+    return res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+});
+
 // Start Express Server
 server.listen(PORT, '0.0.0.0', () => {
   const { isProduction } = require('./src/config/env');

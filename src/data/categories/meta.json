@@ -1,9 +1,9 @@
 {
-  "version": "3.2.0",
-  "updatedAt": "2026-10-13T18:05:00Z",
+  "version": "4.0.0",
+  "updatedAt": "2026-10-15T18:00:00Z",
   "totalLanguages": 18,
   "totalCategories": 8,
-  "totalPhrases": 18594,
+  "totalPhrases": 3600,
   "languages": [
     {
       "code": "en",
@@ -11,7 +11,7 @@
       "nativeName": "English",
       "flag": "🇺🇸",
       "primaryColor": "#3B82F6",
-      "totalPhrases": 1033
+      "totalPhrases": 200
     },
     {
       "code": "es",
@@ -19,7 +19,7 @@
       "nativeName": "Español",
       "flag": "🇪🇸",
       "primaryColor": "#FF5722",
-      "totalPhrases": 1033
+      "totalPhrases": 200
     },
     {
       "code": "fr",
@@ -27,7 +27,7 @@
       "nativeName": "Français",
       "flag": "🇫🇷",
       "primaryColor": "#6366F1",
-      "totalPhrases": 1033
+      "totalPhrases": 200
     },
     {
       "code": "de",
@@ -35,7 +35,7 @@
       "nativeName": "Deutsch",
       "flag": "🇩🇪",
       "primaryColor": "#F59E0B",
-      "totalPhrases": 1033
+      "totalPhrases": 200
     },
     {
       "code": "it",
@@ -43,7 +43,7 @@
       "nativeName": "Italiano",
       "flag": "🇮🇹",
       "primaryColor": "#10B981",
-      "totalPhrases": 1033
+      "totalPhrases": 200
     },
     {
       "code": "ja",
@@ -51,7 +51,7 @@
       "nativeName": "日本語",
       "flag": "🇯🇵",
       "primaryColor": "#EC4899",
-      "totalPhrases": 1033
+      "totalPhrases": 200
     },
     {
       "code": "ko",
@@ -59,7 +59,7 @@
       "nativeName": "한국어",
       "flag": "🇰🇷",
       "primaryColor": "#8B5CF6",
-      "totalPhrases": 1033
+      "totalPhrases": 200
     },
     {
       "code": "zh",
@@ -67,7 +67,7 @@
       "nativeName": "中文",
       "flag": "🇨🇳",
       "primaryColor": "#EF4444",
-      "totalPhrases": 1033
+      "totalPhrases": 200
     },
     {
       "code": "ru",
@@ -75,7 +75,7 @@
       "nativeName": "Русский",
       "flag": "🇷🇺",
       "primaryColor": "#0284C7",
-      "totalPhrases": 1033
+      "totalPhrases": 200
     },
     {
       "code": "pt",
@@ -83,7 +83,7 @@
       "nativeName": "Português",
       "flag": "🇵🇹",
       "primaryColor": "#059669",
-      "totalPhrases": 1033
+      "totalPhrases": 200
     },
     {
       "code": "hi",
@@ -91,7 +91,7 @@
       "nativeName": "हिन्दी",
       "flag": "🇮🇳",
       "primaryColor": "#EA580C",
-      "totalPhrases": 1033
+      "totalPhrases": 200
     },
     {
       "code": "ar",
@@ -99,7 +99,7 @@
       "nativeName": "العربية",
       "flag": "🇸🇦",
       "primaryColor": "#0D9488",
-      "totalPhrases": 1033
+      "totalPhrases": 200
     },
     {
       "code": "tr",
@@ -107,7 +107,7 @@
       "nativeName": "Türkçe",
       "flag": "🇹🇷",
       "primaryColor": "#DC2626",
-      "totalPhrases": 1033
+      "totalPhrases": 200
     },
     {
       "code": "nl",
@@ -115,7 +115,7 @@
       "nativeName": "Nederlands",
       "flag": "🇳🇱",
       "primaryColor": "#F97316",
-      "totalPhrases": 1033
+      "totalPhrases": 200
     },
     {
       "code": "id",
@@ -123,7 +123,7 @@
       "nativeName": "Bahasa Indonesia",
       "flag": "🇮🇩",
       "primaryColor": "#E11D48",
-      "totalPhrases": 1033
+      "totalPhrases": 200
     },
     {
       "code": "th",
@@ -131,7 +131,7 @@
       "nativeName": "ภาษาไทย",
       "flag": "🇹🇭",
       "primaryColor": "#7C3AED",
-      "totalPhrases": 1033
+      "totalPhrases": 200
     },
     {
       "code": "vi",
@@ -139,7 +139,7 @@
       "nativeName": "Tiếng Việt",
       "flag": "🇻🇳",
       "primaryColor": "#CA8A04",
-      "totalPhrases": 1033
+      "totalPhrases": 200
     },
     {
       "code": "tl",
@@ -147,7 +147,7 @@
       "nativeName": "Tagalog",
       "flag": "🇵🇭",
       "primaryColor": "#2563EB",
-      "totalPhrases": 1033
+      "totalPhrases": 200
     }
   ],
   "categories": [
@@ -160,7 +160,7 @@
         "#6366F1",
         "#8B5CF6"
       ],
-      "totalPhrases": 3276
+      "totalPhrases": 450
     },
     {
       "id": "social",
@@ -171,7 +171,7 @@
         "#EC4899",
         "#F43F5E"
       ],
-      "totalPhrases": 3150
+      "totalPhrases": 450
     },
     {
       "id": "travel",
@@ -182,7 +182,7 @@
         "#06B6D4",
         "#0EA5E9"
       ],
-      "totalPhrases": 3150
+      "totalPhrases": 450
     },
     {
       "id": "food",
@@ -193,7 +193,7 @@
         "#F59E0B",
         "#D97706"
       ],
-      "totalPhrases": 3150
+      "totalPhrases": 450
     },
     {
       "id": "dating",
@@ -204,7 +204,7 @@
         "#E11D48",
         "#BE123C"
       ],
-      "totalPhrases": 1530
+      "totalPhrases": 450
     },
     {
       "id": "numbers",
@@ -215,7 +215,7 @@
         "#10B981",
         "#059669"
       ],
-      "totalPhrases": 1458
+      "totalPhrases": 450
     },
     {
       "id": "slang",
@@ -226,7 +226,7 @@
         "#8B5CF6",
         "#6D28D9"
       ],
-      "totalPhrases": 1458
+      "totalPhrases": 450
     },
     {
       "id": "work",
@@ -237,7 +237,7 @@
         "#3B82F6",
         "#1D4ED8"
       ],
-      "totalPhrases": 1422
+      "totalPhrases": 450
     }
   ]
 }
